@@ -90,6 +90,27 @@ class PolyexponentialScheduler:
         sigmas = k_diffusion_sampling.get_sigmas_polyexponential(n=steps, sigma_min=sigma_min, sigma_max=sigma_max, rho=rho)
         return (sigmas, )
 
+class LaplaceScheduler:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required":
+                    {"steps": ("INT", {"default": 20, "min": 1, "max": 10000}),
+                     "sigma_max": ("FLOAT", {"default": 14.614642, "min": 0.0, "max": 5000.0, "step":0.01, "round": False}),
+                     "sigma_min": ("FLOAT", {"default": 0.0291675, "min": 0.0, "max": 5000.0, "step":0.01, "round": False}),
+                     "mu": ("FLOAT", {"default": 0.0, "min": -10.0, "max": 10.0, "step":0.1, "round": False}),
+                     "beta": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 10.0, "step":0.1, "round": False}),
+                    }
+               }
+    RETURN_TYPES = ("SIGMAS",)
+    CATEGORY = "sampling/custom_sampling/schedulers"
+
+    FUNCTION = "get_sigmas"
+
+    def get_sigmas(self, steps, sigma_max, sigma_min, mu, beta):
+        sigmas = k_diffusion_sampling.get_sigmas_laplace(n=steps, sigma_min=sigma_min, sigma_max=sigma_max, mu=mu, beta=beta)
+        return (sigmas, )
+
+
 class SDTurboScheduler:
     @classmethod
     def INPUT_TYPES(s):
@@ -210,6 +231,24 @@ class FlipSigmas:
             sigmas[0] = 0.0001
         return (sigmas,)
 
+class SetFirstSigma:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required":
+                    {"sigmas": ("SIGMAS", ),
+                     "sigma": ("FLOAT", {"default": 136.0, "min": 0.0, "max": 20000.0, "step": 0.001, "round": False}),
+                    }
+               }
+    RETURN_TYPES = ("SIGMAS",)
+    CATEGORY = "sampling/custom_sampling/sigmas"
+
+    FUNCTION = "set_first_sigma"
+
+    def set_first_sigma(self, sigmas, sigma):
+        sigmas = sigmas.clone()
+        sigmas[0] = sigma
+        return (sigmas, )
+
 class KSamplerSelect:
     @classmethod
     def INPUT_TYPES(s):
@@ -293,6 +332,23 @@ class SamplerDPMPP_SDE:
         else:
             sampler_name = "dpmpp_sde_gpu"
         sampler = comfy.samplers.ksampler(sampler_name, {"eta": eta, "s_noise": s_noise, "r": r})
+        return (sampler, )
+
+class SamplerDPMPP_2S_Ancestral:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required":
+                    {"eta": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01, "round": False}),
+                     "s_noise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01, "round": False}),
+                      }
+               }
+    RETURN_TYPES = ("SAMPLER",)
+    CATEGORY = "sampling/custom_sampling/samplers"
+
+    FUNCTION = "get_sampler"
+
+    def get_sampler(self, eta, s_noise):
+        sampler = comfy.samplers.ksampler("dpmpp_2s_ancestral", {"eta": eta, "s_noise": s_noise})
         return (sampler, )
 
 class SamplerEulerAncestral:
@@ -398,7 +454,7 @@ class SamplerCustom:
         return {"required":
                     {"model": ("MODEL",),
                     "add_noise": ("BOOLEAN", {"default": True}),
-                    "noise_seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+                    "noise_seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True}),
                     "cfg": ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step":0.1, "round": 0.01}),
                     "positive": ("CONDITIONING", ),
                     "negative": ("CONDITIONING", ),
@@ -549,10 +605,16 @@ class DisableNoise:
 class RandomNoise(DisableNoise):
     @classmethod
     def INPUT_TYPES(s):
-        return {"required":{
-                    "noise_seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-                     }
-                }
+        return {
+            "required": {
+                "noise_seed": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xffffffffffffffff,
+                    "control_after_generate": True,
+                }),
+            }
+        }
 
     def get_noise(self, noise_seed):
         return (Noise_RandomNoise(noise_seed),)
@@ -656,6 +718,7 @@ NODE_CLASS_MAPPINGS = {
     "KarrasScheduler": KarrasScheduler,
     "ExponentialScheduler": ExponentialScheduler,
     "PolyexponentialScheduler": PolyexponentialScheduler,
+    "LaplaceScheduler": LaplaceScheduler,
     "VPScheduler": VPScheduler,
     "BetaSamplingScheduler": BetaSamplingScheduler,
     "SDTurboScheduler": SDTurboScheduler,
@@ -666,10 +729,12 @@ NODE_CLASS_MAPPINGS = {
     "SamplerDPMPP_3M_SDE": SamplerDPMPP_3M_SDE,
     "SamplerDPMPP_2M_SDE": SamplerDPMPP_2M_SDE,
     "SamplerDPMPP_SDE": SamplerDPMPP_SDE,
+    "SamplerDPMPP_2S_Ancestral": SamplerDPMPP_2S_Ancestral,
     "SamplerDPMAdaptative": SamplerDPMAdaptative,
     "SplitSigmas": SplitSigmas,
     "SplitSigmasDenoise": SplitSigmasDenoise,
     "FlipSigmas": FlipSigmas,
+    "SetFirstSigma": SetFirstSigma,
 
     "CFGGuider": CFGGuider,
     "DualCFGGuider": DualCFGGuider,

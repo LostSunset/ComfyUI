@@ -2,17 +2,16 @@
 #and modified
 
 import torch
-import torch as th
 import torch.nn as nn
 
 from ..ldm.modules.diffusionmodules.util import (
-    zero_module,
     timestep_embedding,
 )
 
 from ..ldm.modules.attention import SpatialTransformer
 from ..ldm.modules.diffusionmodules.openaimodel import UNetModel, TimestepEmbedSequential, ResBlock, Downsample
 from ..ldm.util import exists
+from .control_types import UNION_CONTROLNET_TYPES
 from collections import OrderedDict
 import comfy.ops
 from comfy.ldm.modules.attention import optimized_attention
@@ -161,7 +160,6 @@ class ControlNet(nn.Module):
             if isinstance(self.num_classes, int):
                 self.label_emb = nn.Embedding(num_classes, time_embed_dim)
             elif self.num_classes == "continuous":
-                print("setting up linear c_adm embedding layer")
                 self.label_emb = nn.Linear(1, time_embed_dim)
             elif self.num_classes == "sequential":
                 assert adm_in_channels is not None
@@ -390,6 +388,18 @@ class ControlNet(nn.Module):
         if self.control_add_embedding is not None: #Union Controlnet
             control_type = kwargs.get("control_type", [])
 
+            if any([c >= self.num_control_type for c in control_type]):
+                max_type = max(control_type)
+                max_type_name = {
+                    v: k for k, v in UNION_CONTROLNET_TYPES.items()
+                }[max_type]
+                raise ValueError(
+                    f"Control type {max_type_name}({max_type}) is out of range for the number of control types" +
+                    f"({self.num_control_type}) supported.\n" +
+                    "Please consider using the ProMax ControlNet Union model.\n" +
+                    "https://huggingface.co/xinsir/controlnet-union-sdxl-1.0/tree/main"
+                )
+
             emb += self.control_add_embedding(control_type, emb.dtype, emb.device)
             if len(control_type) > 0:
                 if len(hint.shape) < 5:
@@ -402,7 +412,6 @@ class ControlNet(nn.Module):
         out_output = []
         out_middle = []
 
-        hs = []
         if self.num_classes is not None:
             assert y.shape[0] == x.shape[0]
             emb = emb + self.label_emb(y)
